@@ -1,0 +1,704 @@
+<html>
+
+<head>
+
+<title>Serpent One Encryption</title>
+
+<style type="text/css">
+
+textarea,input
+{
+ font-family: Lucida Console;
+
+ font-size: 11pt;
+}
+
+</style>
+
+</head>
+
+<script type="text/javascript">
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+ var S_Box_Arr = [];
+
+ var Key = [];
+
+ var PlainText = [];
+
+ var IO_Mode = 0;
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Init_S_Box_Arr()
+{
+ S_Box_Arr = [];
+
+ // S0: 3 8 15 1 10 6 5 11 14 13 4 2 7 0 9 12
+ // S1: 15 12 2 7 9 0 5 10 1 11 14 8 6 13 3 4
+ // S2: 8 6 7 9 3 12 10 15 13 1 14 4 0 11 5 2
+ // S3: 0 15 11 8 12 9 6 3 13 1 2 4 10 7 5 14
+ // S4: 1 15 8 3 12 0 11 6 2 5 4 10 9 14 7 13
+ // S5: 15 5 2 11 4 10 9 12 0 3 14 8 13 6 7 1
+ // S6: 7 2 12 5 8 4 6 11 14 9 1 15 13 3 10 0
+ // S7: 1 13 15 0 14 8 2 11 7 4 12 10 9 3 5 6
+
+ var s0 = [3,8,15,1,10,6,5,11,14,13,4,2,7,0,9,12];
+
+ var s1 = [15,12,2,7,9,0,5,10,1,11,14,8,6,13,3,4];
+
+ var s2 = [8,6,7,9,3,12,10,15,13,1,14,4,0,11,5,2];
+
+ var s3 = [0,15,11,8,12,9,6,3,13,1,2,4,10,7,5,14];
+
+ var s4 = [1,15,8,3,12,0,11,6,2,5,4,10,9,14,7,13];
+
+ var s5 = [15,5,2,11,4,10,9,12,0,3,14,8,13,6,7,1];
+
+ var s6 = [7,2,12,5,8,4,6,11,14,9,1,15,13,3,10,0];
+
+ var s7 = [1,13,15,0,14,8,2,11,7,4,12,10,9,3,5,6];
+
+ S_Box_Arr = s0.concat(s1,s2,s3,s4,s5,s6,s7);
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Substitute_Block(w0,w1,w2,w3,n)
+{
+ // substitute the bits in a 128 bit block
+
+ // the block is divided into 4 x 32 bit words: |w0|w1|w2|w3|
+
+ // for each of the 32 iterations i, the 4-bit input 
+ // to the s-box is constructed by taking one bit (at index i)
+ // from each of the 4 x 32 bit words
+
+ // the corresponding 4 bits in the result are set from the 
+ // output of the s-box
+
+ // n gives the number of the s-box (0-7)
+
+ var result = [0,0,0,0];
+
+ var S_output = [];
+
+ var bits;
+
+ var i;
+
+ // put the 32 bit-slices through 32 copies of the s-box
+
+ for(i=0;i<32;i++)
+ {
+  // construct the bit-slice (1 bit from each word)
+
+  bits = (w3 & 1);
+
+  bits = (bits << 1) | (w2 & 1);
+
+  bits = (bits << 1) | (w1 & 1);
+
+  bits = (bits << 1) | (w0 & 1);
+
+  bits &= 0xf;
+
+  // put the bit-slice through the s-box
+
+  S_output[i] = S_Box_Arr[(n*16)+bits] & 0xf;
+
+  if(i==31) break;
+
+  // left shift the input words for the next iteration
+
+  w0 = w0 >>> 1;
+
+  w1 = w1 >>> 1;
+
+  w2 = w2 >>> 1;
+
+  w3 = w3 >>> 1;
+ }
+
+ for(i=0;i<32;i++)
+ {
+  // set the corresponding bits in the result (1 bit in each word)
+
+  bits = S_output[i];
+
+  result[0] |= (bits & 1) << i;
+
+  result[1] |= ((bits >>> 1) & 1) << i;
+
+  result[2] |= ((bits >>> 2) & 1) << i;
+
+  result[3] |= ((bits >>> 3) & 1) << i;
+ }
+
+ // return the 4 x 32 bit words in an array
+
+ return result;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Build_Key_Schedule(str)
+{
+ // str is a string containing the 64 hex digit input key
+
+ // convert the key to an array of 32 bit words
+
+ Key = [];
+
+ Key = HexStrToArray(str); 
+
+ // the array now contains 8 x 32-bit words
+
+ // append an additional 132 x 32-bit words of key material
+
+ var i;
+
+ var temp = 0;
+
+ var temp_w = 0;
+
+ // w[i] = w[i-8] xor w[i-5] xor w[i-3] xor w[i-1] xor 0x9e3779b9 xor i
+
+ // w[i] = ROTL(w[i],11)
+
+ for(i=8;i<140;i++)
+ {
+  temp_w = i-8;
+
+  temp_w ^= 0x9e3779b9;
+
+  temp_w ^= Key[i-8];
+  
+  temp_w ^= Key[i-5];
+
+  temp_w ^= Key[i-3];
+
+  temp_w ^= Key[i-1];
+
+  temp = temp_w << 11;
+
+  temp_w = temp_w >>> 21;
+
+  temp_w |= temp;
+
+  Key[i] = temp_w & 0xffffffff;
+ }
+
+ var temp_block = [0,0,0,0];
+
+ for(i=0;i<4;i++)
+ {
+  // the offset is the size of the key (8 words) plus (i * 32 words)
+
+  var offset = (i*32)+8;
+
+  temp_block = Substitute_Block(Key[offset],Key[offset+1],Key[offset+2],Key[offset+3],3);
+
+  Key[offset] = temp_block[0];
+  Key[offset+1] = temp_block[1];
+  Key[offset+2] = temp_block[2];
+  Key[offset+3] = temp_block[3];
+
+  temp_block = Substitute_Block(Key[offset+4],Key[offset+5],Key[offset+6],Key[offset+7],2);
+
+  Key[offset+4] = temp_block[0];
+  Key[offset+5] = temp_block[1];
+  Key[offset+6] = temp_block[2];
+  Key[offset+7] = temp_block[3];
+
+  temp_block = Substitute_Block(Key[offset+8],Key[offset+9],Key[offset+10],Key[offset+11],1);
+
+  Key[offset+8] = temp_block[0];
+  Key[offset+9] = temp_block[1];
+  Key[offset+10] = temp_block[2];
+  Key[offset+11] = temp_block[3];
+
+  temp_block = Substitute_Block(Key[offset+12],Key[offset+13],Key[offset+14],Key[offset+15],0);
+
+  Key[offset+12] = temp_block[0];
+  Key[offset+13] = temp_block[1];
+  Key[offset+14] = temp_block[2];
+  Key[offset+15] = temp_block[3];
+
+  temp_block = Substitute_Block(Key[offset+16],Key[offset+17],Key[offset+18],Key[offset+19],7);
+
+  Key[offset+16] = temp_block[0];
+  Key[offset+17] = temp_block[1];
+  Key[offset+18] = temp_block[2];
+  Key[offset+19] = temp_block[3];
+
+  temp_block = Substitute_Block(Key[offset+20],Key[offset+21],Key[offset+22],Key[offset+23],6);
+
+  Key[offset+20] = temp_block[0];
+  Key[offset+21] = temp_block[1];
+  Key[offset+22] = temp_block[2];
+  Key[offset+23] = temp_block[3];
+
+  temp_block = Substitute_Block(Key[offset+24],Key[offset+25],Key[offset+26],Key[offset+27],5);
+
+  Key[offset+24] = temp_block[0];
+  Key[offset+25] = temp_block[1];
+  Key[offset+26] = temp_block[2];
+  Key[offset+27] = temp_block[3];
+
+  temp_block = Substitute_Block(Key[offset+28],Key[offset+29],Key[offset+30],Key[offset+31],4);
+
+  Key[offset+28] = temp_block[0];
+  Key[offset+29] = temp_block[1];
+  Key[offset+30] = temp_block[2];
+  Key[offset+31] = temp_block[3];
+ }
+
+ temp_block = Substitute_Block(Key[136],Key[137],Key[138],Key[139],3);
+
+ Key[136] = temp_block[0];
+ Key[137] = temp_block[1];
+ Key[138] = temp_block[2];
+ Key[139] = temp_block[3];
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Encrypt()
+{
+ SetPlainText();
+
+ var outstr = "";
+
+ var i;
+
+ var w0,w1,w2,w3;
+
+ var temp_block = [0,0,0,0];
+
+ // initialise the 4 x 32-bit words: |w0|w1|w2|w3|
+
+ w0 = PlainText[0];
+
+ w1 = PlainText[1];
+
+ w2 = PlainText[2];
+
+ w3 = PlainText[3];
+
+ for(i=0;i<32;i++)
+ {
+  // xor the sub-key into the 128 bit block
+
+  w0 ^= Key[8+(4*i)];
+
+  w1 ^= Key[8+(4*i)+1];
+
+  w2 ^= Key[8+(4*i)+2];
+
+  w3 ^= Key[8+(4*i)+3];
+
+  // apply the s-boxes
+
+  temp_block = Substitute_Block(w0,w1,w2,w3,i%8);
+
+  w0 = temp_block[0];
+
+  w1 = temp_block[1];
+
+  w2 = temp_block[2];
+
+  w3 = temp_block[3];
+
+  if(i==31) break;
+
+  // Linear Transform
+
+  w0 = RotLeft(w0,13);
+
+  w2 = RotLeft(w2,3);
+  
+  w1 ^= w0 ^ w2;
+
+  w3 ^= w2 ^ ShiftLeft(w0,3);
+
+  w1 = RotLeft(w1,1);
+
+  w3 = RotLeft(w3,7);
+
+  w0 ^= w1 ^ w3;
+
+  w2 ^= w3 ^ ShiftLeft(w1,7);
+
+  w0 = RotLeft(w0,5);
+
+  w2 = RotLeft(w2,22);
+
+  w0 &= 0xffffffff;
+
+  w1 &= 0xffffffff;
+
+  w2 &= 0xffffffff;
+
+  w3 &= 0xffffffff;
+
+  outstr = Print_Block(w0,w1,w2,w3,outstr);
+ }
+
+ // i = 32
+
+ i++;
+
+ w0 ^= Key[8+(4*i)];
+
+ w1 ^= Key[8+(4*i)+1];
+
+ w2 ^= Key[8+(4*i)+2];
+
+ w3 ^= Key[8+(4*i)+3];
+
+ outstr = Print_Block(w0,w1,w2,w3,outstr);
+
+ document.getElementById("txtOutput").value = outstr;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function SetPlainText()
+{
+ // set the 128 bit (16 byte) plain text
+
+ var str = document.getElementById("txtInput").value;
+
+ // remove any non-hex characters
+
+ str = StrToHexStr(str);
+
+ // 128 bits = 16 bytes = 32 hex digits
+
+ // fix length to 32 hex digits
+
+ // pad with zeroes
+
+ while(str.length < 32) str += "0";
+
+ if(str.length > 32) str = str.slice(0,32);
+
+ // convert to an array of 32 bit words
+
+ PlainText = [];
+
+ PlainText = HexStrToArray(str);
+
+ Print_PlainText();
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function SetKey256()
+{
+ // set the 256 bit key 
+
+ var str = document.getElementById("txtKey").value;
+
+ // remove any non-hex characters
+
+ str = StrToHexStr(str);
+
+ // fix length to 64 hex digits
+
+ // pad with zeroes
+
+ while(str.length < 64) str += "0";
+
+ if(str.length > 64) str = str.slice(0,64);
+
+ // build the key schedule
+
+ Build_Key_Schedule(str);
+
+ Print_Key();
+
+ Print_Key_Schedule();
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function StrToHexStr(str)
+{
+ // remove all characters that are not hex digits:
+
+ var ptn_not_hex = /[^0-9a-fA-F]{1,}/g; 
+
+ str = str.replace(ptn_not_hex,"");
+
+ return str;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function HexStrToArray(str)
+{
+ // convert the string to an array of 32 bit words:
+
+ var hex_arr = [];
+
+ for(var i=0;i<str.length/8;i++)
+ {
+  var tstr = str.substr(8*i,8);
+
+  var tmp = parseInt(tstr,16);
+
+  if(IO_Mode==1)
+  {
+   // byte array (NESSIE) input mode
+ 
+   // reverse the bytes in the 32 bit word:
+
+   var b3 = (tmp & 0xff) << 24;
+  
+   var b2 = (tmp & 0xff00) << 8;
+
+   var b1 = (tmp & 0xff0000) >> 8;
+
+   var b0 = (tmp >>> 24) & 0xff; 	
+
+   tmp = b3 + b2 + b1 + b0;
+  }
+
+  hex_arr[i] = tmp & 0xffffffff;
+ }
+
+ return hex_arr;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Print_Word(w)
+{
+ // print a 32 bit word
+
+ var str = "";
+
+ if(IO_Mode==1)
+ {
+  // byte array (NESSIE) I/O Mode
+
+  // reverse the bytes in the word
+
+  var tmp = w;
+
+  var b3 = (tmp & 0xff) << 24;
+  
+  var b2 = (tmp & 0xff00) << 8;
+
+  var b1 = (tmp & 0xff0000) >> 8;
+
+  var b0 = (tmp >>> 24) & 0xff; 	
+
+  w = b3 + b2 + b1 + b0;
+ }
+
+ str = (w>>>0).toString(16);
+ 
+ while(str.length < 8) str = "0" + str;
+
+ return str;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Print_Key()
+{
+ // print the 256 bit key
+
+ var i;
+
+ var outstr = "";
+
+ var tstr;
+
+ for(i=0;i<8;i++)
+ {
+  tstr = Print_Word(Key[i]);
+
+  outstr += tstr + " ";
+
+  if(i==3) outstr += "\r\n";
+ }
+
+ document.getElementById("txtKey").value = outstr;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Print_PlainText()
+{
+ // print the plain text
+
+ var outstr = "";
+
+ var tstr;
+
+ for(i=0;i<4;i++)
+ {
+  tstr = Print_Word(PlainText[i]);
+
+  outstr += tstr + " ";
+ }
+
+ document.getElementById("txtInput").value = outstr;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Print_Block(w0,w1,w2,w3,str)
+{
+ // print the words in a 128 bit block and append to the input string
+
+ var tstr = Print_Word(w0);
+
+ str += tstr + " ";
+
+ tstr = Print_Word(w1);
+
+ str += tstr + " ";
+
+ tstr = Print_Word(w2);
+
+ str += tstr + " ";
+
+ tstr = Print_Word(w3);
+
+ str += tstr + "\r\n";
+
+ return str;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Clear()
+{
+ Key = [];
+
+ PlainText = [];
+
+ Init_S_Box_Arr();
+
+ document.getElementById("txtKey").value = "Enter the 64 hex digit key.";
+
+ document.getElementById("txtInput").value = "Enter the 32 hex digit input block.";
+
+ document.getElementById("txtOutput").value = "";
+
+ if(IO_Mode==0)
+ {
+  document.getElementById("txtMode").innerHTML = "Standard I/O Mode";
+ }
+ else
+ {
+  document.getElementById("txtMode").innerHTML = "Byte Array (NESSIE) I/O Mode";
+ }
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Print_Key_Schedule()
+{
+ var outstr = "";
+
+ if(Key.length < 140)
+ {
+  outstr = "Error: cannot print key schedule. Enter a key.";
+
+  document.getElementById("txtOutput").value = outstr;
+
+  return;
+ }
+
+ // print the key schedule - including the input key
+
+ // the input key is the first 8 x 32 bit words 
+
+ var i,j;
+
+ var tstr;
+
+ for(i=0;i<35;i++)
+ {
+  for(j=0;j<4;j++)
+  {
+   tstr = Print_Word(Key[(i*4)+j]);
+
+   outstr += tstr + " ";
+  }
+
+  outstr += "\r\n";	
+ }
+
+ document.getElementById("txtOutput").value = outstr;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function RotLeft(word,rot)
+{
+ var tmp = (word << rot) | (word >>> (32-rot));
+
+ return tmp & 0xffffffff;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function ShiftLeft(word,shift)
+{
+ var tmp = word << shift;
+
+ return tmp & 0xffffffff;
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function Toggle_IO_Mode()
+{
+ IO_Mode ^= 1;
+
+ Clear();
+}
+
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+</script>
+
+<body onLoad = "Clear()">
+
+<h2 id="txtMode">Standard I/O Mode</h2>
+
+<input type="button" value="Set Key" onClick="SetKey256()">
+<input type="button" value="Encrypt" onClick="Encrypt()">
+<input type="button" value="View Key Schedule" onClick="Print_Key_Schedule()">
+<input type="button" value="I/O Mode" onClick="Toggle_IO_Mode()">
+<input type="button" value="Clear" onClick="Clear()">
+
+<br><br>
+
+Key:<br>
+
+<textarea id="txtKey" rows="2" cols="60" spellcheck="false"></textarea>
+
+<br><br>
+
+Input:<br>
+
+<textarea id="txtInput" rows="1" cols="60" spellcheck="false"></textarea>
+
+<br><br>
+
+Output:<br>
+
+<textarea id="txtOutput" rows="32" cols="60" spellcheck="false"></textarea>
+
+</body>
+
+</html>
